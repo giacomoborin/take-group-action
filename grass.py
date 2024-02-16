@@ -25,8 +25,7 @@ class GRASS():
         :param skip: Whether to skip certain operations (default is False).
         :param lam: The security parameter (default is 128).
         """
-        
-        
+
         # group action informations
         self.A = action
         if not action:
@@ -44,7 +43,7 @@ class GRASS():
         if self.fixed_weight and not w:
             raise ValueError('Parameter w not setted for fixed weight')
         self.w = w
-        
+
         self.MPC = MPC
         if not self.MPC and N != 1:
             raise ValueError('With MPC-in-the-Head setting off N must be equal to 1')
@@ -52,10 +51,10 @@ class GRASS():
         if not self.MPC and skip:
             raise ValueError('Skipped edges must be used with MPC-in-the-Head')
         self.skip = skip
-        
+
         self.lam = lam
         self.M = num_public_keys
-        
+
         # optimal evaluation of the rounds for the security level
         if not self.fixed_weight:
             self.num_rounds = ceil(lam / log(self.M*self.N + 1,2))
@@ -74,7 +73,7 @@ class GRASS():
 
         # Variables for the response
         self.resp = []
-        
+
     def size(self, set_cost, group_cost, bytes = False):
         lam = self.lam
         if bytes:
@@ -95,7 +94,7 @@ class GRASS():
                 sig += ceil(lam/2 * log(self.N,2))
             else:
                 ver_group_actions = self.num_rounds * self.N
-        
+
         costs = {
             'pub_key' : ceil(set_cost*self.M + lam),
             'signature' : ceil(sig),
@@ -103,7 +102,7 @@ class GRASS():
             'ver_group_actions' : ver_group_actions
         }
         return costs
-        
+
     def keygen(self): 
         self.pk = []
         self.sk = []
@@ -140,7 +139,7 @@ class GRASS():
             return buff
         else:
             return [randint(0,self.M) for _ in range(self.num_rounds)]
-        
+
     def challenge_from_message(self, msg, ch = None):
         """
         Compute a challenge deterministically from a
@@ -156,7 +155,7 @@ class GRASS():
 
     def response(self,ch):
         """
-        
+
         """
         if self.pk is None or self.sk is None:
             raise ValueError(f"Must first generate a keypair with `self.keygen()`")
@@ -207,7 +206,7 @@ class GRASS():
                 new_commitment_elements.append(cmt(self.A.act(RESP[idx],self.pk[c - 1])))
         COM = cmt(new_commitment_elements)
         return COM
-        
+
     def verify(self, sig , msg):
         """
         Verify that the compressed bitstring S corresponds to
