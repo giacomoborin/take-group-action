@@ -22,7 +22,7 @@ def SF(G):
         raise ValueError('input matrix without systematic form')
     return sol
 
-class MonomialMap():
+class MonomialMap(Parent):
     def __init__(self,n,q,P = None, D = None, SEED = None):
         self.n = n
         self.q = q
@@ -53,5 +53,26 @@ class MonomialMap():
 
     def is_one(self):
         return self.perm.is_one() and set(self.diag) == {1}
+
+
+
+class LCE(CryptoAction):
+    def __init__(self,n,k,q,security = 128):
+        self.n = n
+        self.k = k
+        self.q = q
+        self.F = GF(q)
+        P = MonomialMap(n,q)
+        G = random_matrix(self.F,k,n)
+        super().__init__(parent(P),parent(G),security)
+
+    def rand_group(self, SEED = None):
+        return MonomialMap(self.n,self.q,SEED = SEED)
+
+    def act(self,Q,G):
+        if Q in ZZ:
+            Q = MonomialMap(n = self.n,q = self.q, SEED = Q)
+        Q = Q.to_matrix()
+        return SF(G*Q)
 
 
