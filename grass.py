@@ -2,10 +2,11 @@
 from sage.all import randint, ZZ, factor, proof, binomial
 from sage.categories.action import Action
 from action import CryptoAction
+from general_purpose import MerkleTree, SeedTree, cmt
 
 
 class GRASS():
-    def __init__(self, action: CryptoAction, 
+    def __init__(self, action: CryptoAction,
                  num_public_keys = 1,
                  fixed_weight = False,
                  w = None,
@@ -14,18 +15,21 @@ class GRASS():
                  skip = False,
                  lam = 128):
         """
-        Initialize a CryptoSystem object.
+        Initializes a GRASS object.
 
-        :param action: The action to be performed by the CryptoSystem.
-        :param num_public_keys: The number of public keys to be used (default is 1).
-        :param fixed_weight: Whether to use fixed weights (default is False).
-        :param w: The weights to be used (default is None).
-        :param MPC: Whether to use Multi-Party Computation (MPC) (default is False).
-        :param N: The number of parties involved in MPC (default is 1).
-        :param skip: Whether to skip certain operations (default is False).
-        :param lam: The security parameter (default is 128).
+        Parameters:
+        - action (CryptoAction): Group action used for the signature.
+        - num_public_keys (int): Number of public keys.
+        - fixed_weight (bool): Whether to use fixed weight for the signature.
+        - w (int): Weight parameter for fixed weight signature.
+        - MPC (bool): Whether to use MPC-in-the-Head.
+        - N (int): Number of rounds.
+        - skip (bool): Whether to skip edges.
+        - lam (int): Security parameter.
+
+        Raises:
+        - ValueError: If parameters are invalid.
         """
-
         # group action informations
         self.A = action
         if not action:
@@ -75,6 +79,17 @@ class GRASS():
         self.resp = []
 
     def size(self, set_cost, group_cost, bytes = False):
+        """
+        Computes the size of various components.
+
+        Parameters:
+        - set_cost (int): Cost of set operations.
+        - group_cost (int): Cost of group operations.
+        - bytes (bool): Whether to return size in bytes.
+
+        Returns:
+        - dict: Size of public key, signature, group actions, and verification group actions.
+        """
         lam = self.lam
         if bytes:
             lam /= 8
@@ -103,7 +118,13 @@ class GRASS():
         }
         return costs
 
-    def keygen(self): 
+    def keygen(self):
+        """
+        Returns the public key.
+
+        Returns:
+        - list: Public key.
+        """
         self.pk = []
         self.sk = []
         for i in range(self.M):
@@ -114,9 +135,10 @@ class GRASS():
 
     def export_public_key(self):
         """
-        Helper function to return the public key
+        Returns the public key.
 
-        TODO: this could be compressed, probably.
+        Returns:
+        - list: Public key.
         """
         if self.pk is None:
             raise ValueError(f"Must first generate a keypair with `self.keygen()`")
@@ -124,19 +146,39 @@ class GRASS():
 
     def commitment(self):
         """
-        sa
+        Generates commitment.
+
+        Returns:
+        - int: Commitment hash.
         """
+
         self.commitment_secrets = [randint(0,2**self.lam - 1) for _ in range(self.num_rounds)]
-        self.commitment_elements = [self.A.act(SEED,self.origin) for SEED in self.commitment_secrets]
-        self.commit_hash = cmt([cmt(x) for x in self.commitment_elements],lam = self.lam)
+        if not self.MPC:
+            self.commitment_elements = [self.A.act(SEED,self.origin) for SEED in self.commitment_secrets]
+            self.commit_hash = cmt([cmt(x) for x in self.commitment_elements],lam = self.lam)
+        else:
+            raise ValueError('MPC-in-the-Head not implemented')
+            self.commit_hash = cmt([MerkleTree(data) for data in self.commitment_elements],lam = self.lam)
         return self.commit_hash
 
 
     def challenge(self):
+        """
+        Generates a list of random challenges for each
+        round of the protocol.
+
+        Returns:
+        - list: Challenge.
+        """
         if self.fixed_weight:
-            buff = [0] * (self.num_rounds - self.w) + [randint(1,self.M) for _ in range(self.w)]
+            if self.MPC:
+                raise ValueError('Challenge for MPC not yet implemented')
+            else:
+                buff = [0] * (self.num_rounds - self.w) + [randint(1,self.M) for _ in range(self.w)]
             shuffle(buff)
             return buff
+        elif self.MPC:
+            raise ValueError('Challenge for MPC not yet implemented')
         else:
             return [randint(0,self.M) for _ in range(self.num_rounds)]
 
@@ -145,6 +187,8 @@ class GRASS():
         Compute a challenge deterministically from a
         message
 
+        Returns:
+        - list: Challenge.
         """
         if ch:
             self.ch = ch
@@ -155,7 +199,13 @@ class GRASS():
 
     def response(self,ch):
         """
+        Generates a response for the challenge.
 
+        Parameters:
+        - ch: Challenge.
+
+        Returns:
+        - list: Response.
         """
         if self.pk is None or self.sk is None:
             raise ValueError(f"Must first generate a keypair with `self.keygen()`")
@@ -175,17 +225,15 @@ class GRASS():
 
     def sign(self, msg):
         """
-        Use SQISign to sign a message by creating a challenge
-        isogeny from the message and generating a response S
-        from the challenge.
+        Signs a message.
 
-        Input: msg: the message to be signed
+        Parameters:
+        - msg: Message to be signed.
 
-        Output: sig: a signature tuple (E1, S)
-                    E1 : the codomain of the commitment
-                    S: a compressed bitstring of the response isogeny EA → E2
+        Returns:
+        - tuple: Signature tuple (CH, RESP), where CH is the commitment hash and RESP is the response.
         """
-        # Make a commitment
+        # Make a commitment 
         COM = self.commitment()
 
         # Use the message to find a challenge
@@ -197,6 +245,16 @@ class GRASS():
         return Integer(self.ch), RESP
 
     def commit_recover(self, CH, RESP):
+        """
+        Recovers commitment.
+
+        Parameters:
+        - CH: Commitment hash.
+        - RESP: Response.
+
+        Returns:
+        - int: New commitment hash.
+        """
         new_commitment_elements = []
         with seed(ZZ('0x' + CH)): challenges = self.challenge()
         for idx, c in enumerate(challenges):
@@ -209,9 +267,14 @@ class GRASS():
 
     def verify(self, sig , msg):
         """
-        Verify that the compressed bitstring S corresponds to
-        an isogeny σ EA → E2 of degree l^e such that ϕ_dual ∘ σ
-        is cyclic
+        Verifies the signature.
+
+        Parameters:
+        - sig: Signature.
+        - msg: Message.
+
+        Returns:
+        - bool: True if signature is valid, False otherwise.
         """
         CH, RESP = sig
         COM = self.commit_recover(CH, RESP)

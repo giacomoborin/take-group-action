@@ -59,7 +59,7 @@ class MerkleTree:
                 print(f'{space * (2**i - 1)}{hash[:4]}...{space * (2**i - 1)}', end=' ')
             print('')
             i += 1
-            
+
     def tail_cover(self, x, left = True):
         # Returns the cover of the left tail of the tree using x consecutive entries
         if x == len(self.data):
@@ -98,7 +98,7 @@ def tail_cover_verify(cover, data, root, initial_len = None, left = True, ground
         data = [cmt(d) for d in data]
     elif not cover and len(data) == 1:
         return root == data[0]
-        
+
     if len(data) % 2:
         data.append(cover.pop())
     # print([h[:4] + '...' for h in data])
@@ -107,10 +107,10 @@ def tail_cover_verify(cover, data, root, initial_len = None, left = True, ground
         new_data = [cmt(data[2*i+1] + data[2*i]) for i in range(len(data)//2)]
     else:
         new_data = [cmt(data[2*i] + data[2*i+1]) for i in range(len(data)//2)]
-    
+
     return tail_cover_verify(cover, new_data, root, left = left, ground_level = False)
-            
-    
+
+
 class SeedTree():
     pass
 
