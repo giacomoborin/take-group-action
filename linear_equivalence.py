@@ -48,12 +48,14 @@ class MonomialMap(Parent):
         D = self.V((self.perm.inverse()).action(self.diag))
         return MonomialMap(n = self.n, q = self.q, P =  self.perm.inverse(), D = self.V([ a**-1 for a in D]))
 
+    def __truediv__(self, Q):
+        return self * Q.inverse()
+
     def __eq__(self,Q):
         return self.perm == Q.perm and self.diag == Q.diag
 
     def is_one(self):
         return self.perm.is_one() and set(self.diag) == {1}
-
 
 
 class LCE(CryptoAction):
