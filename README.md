@@ -12,7 +12,7 @@ The goal of this repository is to give a reference code for digital signatures (
 **Hash & Commitment:** for this purpose we always use the function `cmt(input, lam)` from `general_purpose.py` that takes as input any object, convert it to a string and hash it; then it returns `lam` bits in hexadecimal format in a string.  
 
 **Seeds:** they are intended as integers, an integer `s` can be used as seed in two ways:
-- via feeding `s` as `SEED` during the object generation: `obj = X(param, SEED = s`;
+- via feeding `s` as `SEED` during the object generation: `obj = X(param, SEED = s)`;
 - using the sage construction:
 ```
 with seed(s) :
