@@ -52,6 +52,7 @@ class MatrixCode():
 
 
 class MatrixCodeIsomorphism():
+    # perhaps switch to isometry instead of isomorphism?
     def __init__(self, n, m, q, SEED = None, A = None, B = None):
         self.n = n
         self.m = m
@@ -89,9 +90,7 @@ class MatrixCodeIsomorphism():
         return f'MatrixCodeIsomorphism represented by the matrices\n{self.A}\nand\n{self.B}'
 
     def __eq__(self,Q):
-        return self.perm == Q.perm and self.diag == Q.diag
-
-
+        return self.A == Q.A and self.B == Q.B
 
 
 class MCE(CryptoAction):
