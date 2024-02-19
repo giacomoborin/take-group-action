@@ -8,6 +8,9 @@ from sage.rings.rational import Rational
 from sage.rings.finite_rings.finite_field_constructor import GF
 from sage.matrix.constructor import diagonal_matrix, matrix
 #from sage.matrix.matrix2 import rref
+from sage.coding.linear_code import LinearCode
+
+from general_purpose import cmt
 
 
 
@@ -21,6 +24,50 @@ def SF(G):
     if sol[:,:k].is_singular():
         raise ValueError('input matrix without systematic form')
     return sol
+
+class CryptoLinearCode(LinearCode):
+    """
+    Child class to sage.coding.linear_code.LinearCode with specific 
+    functions for Cryptographic use meant for using code equivalence.
+
+    The class should be adapted to handle also Canonical Forms
+    """
+    def __init__(self, n, k, q, G = None, SEED = None, lam = 128):
+        self.n = n
+        self.k = k
+        self.q = q
+        self.F = GF(q)
+        self.lam = lam
+        if G:
+            if G[:,:k].is_singular():
+                raise ValueError('input matrix without systematic form')
+            super().__init__(G)
+        else:
+            with seed(SEED): G = random_matrix(self.F,k,n)
+            while G[:,:k].is_singular():
+                with seed(SEED): SEED = randint(0,2**self.lam - 1)
+                with seed(SEED): G = random_matrix(self.F,k,n)
+            super().__init__(G)
+        # here we rewrite the internal matrix so that only the sf one is stored
+        self._generator_matrix = self.systematic_generator_matrix()
+
+    def __repr__(self):
+        sup_repr = super().__repr__()
+        return f'{sup_repr} with hashed generator matrix = {cmt(self._generator_matrix,lam = self.lam)}'
+
+    @cached_method
+    def get_action(self):
+        action = LCE(n = self.n, k = self.k, q = self.q)
+        return action
+
+    def act(self, Q):
+        action = self.get_action()
+        return action.act(Q, self)
+
+
+
+
+
 
 class MonomialMap(Parent):
     def __init__(self,n,q,P = None, D = None, SEED = None):
@@ -65,16 +112,28 @@ class LCE(CryptoAction):
         self.q = q
         self.F = GF(q)
         P = MonomialMap(n,q)
-        G = random_matrix(self.F,k,n)
-        super().__init__(parent(P),parent(G),security)
+        C = CryptoLinearCode(n, k, q, SEED = 1)
+        super().__init__(parent(P),category(C),security, is_left = False)
 
     def rand_group(self, SEED = None):
         return MonomialMap(self.n,self.q,SEED = SEED)
 
-    def act(self,Q,G):
+    def rand_set(self, SEED = None):
+        return CryptoLinearCode(n = self.n, k = self.k, q = self.q, SEED = SEED)
+
+    def act(self,Q,C):
         if Q in ZZ:
             Q = MonomialMap(n = self.n,q = self.q, SEED = Q)
-        Q = Q.to_matrix()
-        return SF(G*Q)
+        G_out = C.generator_matrix()*Q.to_matrix()
+        OUT = CryptoLinearCode(n = C.n, k = C.k, q = C.q, G = G_out)
+        return OUT
+
+    def _act_(self,Q,C):
+        """
+        Does not work when Q is a seed!
+        """
+        if Q in ZZ:
+            Q = MonomialMap(n = self.n,q = self.q, SEED = Q)
+        return self.act(Q,C)
 
 

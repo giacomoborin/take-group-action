@@ -8,8 +8,8 @@ from sage.categories.action import Action
 
 
 class CryptoAction(Action):
-    def __init__(self,G,S,security):
-        super().__init__(G,S)
+    def __init__(self,G,S,security,is_left=True):
+        super().__init__(G,S,is_left = is_left)
         self.security = security
 
     def rand_set(self, SEED = None):

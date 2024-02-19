@@ -158,6 +158,8 @@ class GRASS():
             self.commit_hash = cmt([cmt(x) for x in self.commitment_elements],lam = self.lam)
         else:
             raise ValueError('MPC-in-the-Head not implemented')
+            # generation of element via SeedTree()
+            # sequential appliation to the origin
             self.commit_hash = cmt([MerkleTree(data) for data in self.commitment_elements],lam = self.lam)
         return self.commit_hash
 
