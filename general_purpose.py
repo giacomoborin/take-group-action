@@ -1,16 +1,25 @@
 # Python imports
 from hashlib import shake_128
 from sage.functions.other import Function_ceil
+from sage.all import Integer
 
 
 def cmt(input, lam = 128):
     return to_hex(Integer(int.from_bytes(shake_128(str.encode(str(input))).digest(ceil(lam/8)))),lam = lam)
 
 def to_hex(input, lam = 128):
-    return Integer(input).hex().rjust(2*ceil(lam/8), '0')
+    if input in ZZ:
+        return Integer(input).hex().rjust(2*ceil(lam/8), '0')
+    elif set(input) <= {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'}:
+        return input
+    else:
+        raise ValueError('Input entry not integer of hexadecimal')
 
 def to_int(input):
-    return ZZ('0x' + input)
+    if input in ZZ:
+        return input 
+    else:
+        return ZZ('0x' + input)
 
 # memo for HEX -> int do s -> ZZ('0x'+s)
 
@@ -112,6 +121,74 @@ def tail_cover_verify(cover, data, root, initial_len = None, left = True, ground
 
 
 class SeedTree():
-    pass
+    def __init__(self, num_leaves, SALT = None, SEED = None, lam = 128):
+        self.num_leaves = num_leaves
+        self.lam = lam
+        next_power_of_two = 1
+        self.deep = 0
+        while next_power_of_two < num_leaves:
+            next_power_of_two *= 2
+            self.deep += 1
+        if SEED:
+            self.root = to_hex(SEED)
+        else:
+            self.root = to_hex(randint(0,2**self.lam - 1))
+        if SALT:
+            self.salt = to_hex(SALT)
+        else:
+            self.salt = to_hex(randint(0,2**self.lam - 1))
+        self.levels = []
+        self.construct_tree()
+        self.leaves = self.levels[-1][:num_leaves]
+
+    def construct_tree(self):
+        # Initialize the bottom level with hashes of individual data elements
+        current_level = [self.root]
+        self.levels.append(current_level)
+        j = 0
+        while len(current_level) < self.num_leaves:
+            next_level = []
+            # Combine adjacent hashes to create parent hashes
+            for i in range(0, len(current_level)):
+                with seed(
+                    to_int(self.salt + current_level[i])
+                ):
+                    seed_0 = randint(0,2**self.lam - 1)
+                    next_level.append(to_hex(seed_0, lam=self.lam))
+                    seed_1 = randint(0,2**self.lam - 1)
+                    next_level.append(to_hex(seed_1, lam=self.lam))
+            self.levels.append(next_level)
+            current_level = next_level
+            j += 1
+
+    def get_root(self):
+        return self.levels[0][0]
+
+    def get_leaves(self):
+        return self.leaves
+
+    def __repr__(self):
+        return f'Seed tree with with {self.num_leaves} leaves and root {self.get_root()}'
+
+    def print_tree(self):
+        # just fun Function 
+        i = self.deep
+        space = '    '
+        for level in self.levels:
+            print(f'lvl {self.deep - i} :', end=' ')
+            for hash in level:
+                print(f'{space * (2**i - 1)}{hash[:4]}...{space * (2**i - 1)}', end=' ')
+            print('')
+            i -= 1
+
+    def get_cover(self, indeces):
+        if indeces in ZZ:
+            pass
+        else:
+            pass
+
+
+
+
 
 
