@@ -68,9 +68,10 @@ class GRASS():
         # optimal evaluation of the rounds for the security level
         if not self.fixed_weight:
             self.num_rounds = ceil(lam / log(self.num_public_keys*self.N + 1,2))
+            self.w = ceil(self.num_rounds * (self.num_public_keys*self.N) / (self.num_public_keys*self.N + 1))
         else:
             self.num_rounds = self.w + 1
-            while ( binomial(self.num_rounds,self.w)*(self.N*self.num_public_keys)**self.w < 2**self.lam ):
+            while ( binomial(self.num_rounds,self.w)*(self.N*self.num_public_keys)**self.w < 2**self.lam ) and self.num_rounds < 100000:
                 self.num_rounds += 1
 
         # Variables for commitments
@@ -100,7 +101,7 @@ class GRASS():
 
 
 
-    def size(self, set_cost, group_cost, bytes = False, max = False):
+    def size(self, set_cost, group_cost, bytes = True, max = False):
         """
         Computes the size of various components.
 
