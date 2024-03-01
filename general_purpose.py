@@ -1,7 +1,8 @@
 # Python imports
 from hashlib import shake_128
-from sage.functions.other import Function_ceil
 from sage.all import Integer
+from math import ceil, log
+
 
 
 def cmt(input, lam = 128):
@@ -150,16 +151,13 @@ class SeedTree():
             next_level = []
             # Combine adjacent hashes to create parent hashes
             for i in range(0, len(current_level)):
-                with seed(
-                    to_int(self.salt + current_level[i])
-                ):
-                    seed_0 = randint(0,2**self.lam - 1)
-                    next_level.append(to_hex(seed_0, lam=self.lam))
-                    seed_1 = randint(0,2**self.lam - 1)
-                    next_level.append(to_hex(seed_1, lam=self.lam))
+                seed_0, seed_1 = expand_children(SEED = current_level[i], SALT = self.salt, lam = self.lam)
+                next_level.append(seed_0)
+                next_level.append(seed_1)
+
             self.levels.append(next_level)
             current_level = next_level
-            j += 1
+            j += 1 
 
     def get_root(self):
         return self.levels[0][0]
@@ -180,15 +178,74 @@ class SeedTree():
                 print(f'{space * (2**i - 1)}{hash[:4]}...{space * (2**i - 1)}', end=' ')
             print('')
             i -= 1
+        pass
 
-    def get_cover(self, indeces):
-        if indeces in ZZ:
+    def get_cover_single(self, index):
+        """
+        return a cover to get all the leaves but the index-th one
+        """
+        pass
+
+
+    def get_cover(self, subset):
+        # Initialize the cover with the given subset of leaves
+        cov = cover(subset)
+        cover_seeds = []
+        level = 0
+        for level_cover in cov:
+            level += 1
+            level_seeds = { (idx,seed) for (idx,seed) in enumerate(self.levels[-level]) if idx in level_cover}
+            cover_seeds.append(level_seeds)
+        return cover_seeds
+
+def expand_children(SEED, SALT, lam):
+        with seed(
+                to_int(SALT + SEED)
+                ):
+            seed_0 = randint(0,2**lam - 1)
+            seed_0 = to_hex(seed_0, lam=lam)
+            seed_1 = randint(0,2**lam - 1)
+            seed_1 = to_hex(seed_1, lam=lam)
+        return seed_0, seed_1
+
+def seeds_from_cover(subset,cover_seeds, SALT, dept):
+    cov = cover(subset)
+    for level in range(len(cov)):
+        for index in range(len(cov[level])):
             pass
-        else:
-            pass
 
 
 
 
+def one_level_cover(subset):
+    buff = []
+    subset_copy = subset.copy()
+    for x in subset:
+        if x % 2 == 0 and (x+1) in subset:
+            buff.append(x // 2)
+            subset_copy.remove(x)
+            subset_copy.remove(x+1)
+    return subset_copy,buff
 
+
+def cover(subset):
+    subset_cleared, new_subset = one_level_cover(subset)
+    cov = [ subset_cleared ]
+    while new_subset:
+        subset_cleared, new_subset = one_level_cover(new_subset)
+        cov.append(subset_cleared)
+    return cov
+
+def N_seed(t,w,max = False):
+    if t < w:
+        raise ValueError(f'Invalid input for seed cost estimator {t =}, {w =}')
+    else:
+        return ceil(w * log(t / w, 2))
+
+def l_tail(t, max = False):
+    if not max:
+        # we use the approximation since it is always a good bound
+        return log(t,2)/2
+    else:
+        return log(t,2)
 

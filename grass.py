@@ -2,7 +2,8 @@
 from sage.all import randint, ZZ, factor, proof, binomial
 from sage.categories.action import Action
 from action import CryptoAction
-from general_purpose import MerkleTree, SeedTree, cmt
+from general_purpose import MerkleTree, SeedTree, cmt, N_seed, l_tail
+from math import ceil, log
 
 
 class GRASS():
@@ -13,6 +14,8 @@ class GRASS():
                  MPC = False,
                  N = 1,
                  skip = False,
+                 skip_left = True,
+                 num_rounds = None,
                  lam = 128):
         """
         Initializes a GRASS object.
@@ -55,16 +58,19 @@ class GRASS():
         if not self.MPC and skip:
             raise ValueError('Skipped edges must be used with MPC-in-the-Head')
         self.skip = skip
+        if not skip_left and self.fixed_weight:
+            raise ValueError('Right Skipped edges incompatible with Fixed Weight')
+        self.skip_left = skip_left
 
         self.lam = lam
-        self.M = num_public_keys
+        self.num_public_keys = num_public_keys
 
         # optimal evaluation of the rounds for the security level
         if not self.fixed_weight:
-            self.num_rounds = ceil(lam / log(self.M*self.N + 1,2))
+            self.num_rounds = ceil(lam / log(self.num_public_keys*self.N + 1,2))
         else:
             self.num_rounds = self.w + 1
-            while ( binomial(self.num_rounds,self.w)*(self.N*self.M)**self.w < 2**self.lam ):
+            while ( binomial(self.num_rounds,self.w)*(self.N*self.num_public_keys)**self.w < 2**self.lam ):
                 self.num_rounds += 1
 
         # Variables for commitments
@@ -78,7 +84,23 @@ class GRASS():
         # Variables for the response
         self.resp = []
 
-    def size(self, set_cost, group_cost, bytes = False):
+        # Group action evaluation for the algorithm
+        self.group_actions_signing = self.num_rounds*self.N
+        # plain MPC case
+        if not self.skip:
+            self.group_actions_verify = self.group_actions_signing
+        # skip case, no FW
+        elif not self.fixed_weight:
+            self.group_actions_verify = self.num_rounds*ceil(1 + self.N/2)
+        # skip case, with FW
+        else:
+            self.group_actions_verify = self.num_rounds + self.w*ceil((1+self.N)/2)
+
+
+
+
+
+    def size(self, set_cost, group_cost, bytes = False, max = False):
         """
         Computes the size of various components.
 
@@ -86,6 +108,7 @@ class GRASS():
         - set_cost (int): Cost of set operations.
         - group_cost (int): Cost of group operations.
         - bytes (bool): Whether to return size in bytes.
+        - max (bool): Whether to return max or average size of the signature.
 
         Returns:
         - dict: Size of public key, signature, group actions, and verification group actions.
@@ -93,28 +116,38 @@ class GRASS():
         lam = self.lam
         if bytes:
             lam /= 8
+
+        # the case for MPCitH is handled by the fact that for N = 1 
+        # the formulas for the signature are equivalent (log(N,2)=0)
+        # since the advantage is clear we always use seed tree
+
         if self.fixed_weight:
-            n_seed = ceil(self.w * log(self.num_rounds / self.w, 2))
-            sig = self.w * (group_cost + ceil(log(self.N,2))*lam) + n_seed*lam + 3*lam
-            if self.skip:
-                ver_group_actions = self.num_rounds + ceil(self.w*self.N/2)
-            else:
-                ver_group_actions = self.num_rounds * self.N
+            # rows 10 and 14
+            sig = self.w * (group_cost + ceil(log(self.N,2)) * lam) + N_seed(t = self.num_rounds, w = self.w, max = max)*lam + 3 * lam
+            # rows 19 and 20
+            if self.skip and self.skip_left:
+                sig += 2 * lam * N_seed(t = self.num_rounds, w = self.w, max = max)
+                sig += w * 2 * lam * l_tail(t = self.N - 1, max = max)
+        # no use of fixed weight
         else:
-            sig = self.num_rounds * ceil( 
-                (1 - 1/(self.M*self.N + 1)) * (group_cost + ceil(log(self.N,2))*lam) + 
-                (1/(self.M*self.N + 1)) *lam ) + 3*lam
-            if self.skip:
-                ver_group_actions = ceil( self.num_rounds * ( 1 + self.N/2) )
-                sig += ceil(lam/2 * log(self.N,2))
+            # rows 2 and 12
+            if max:
+                sig = self.num_rounds * (group_cost + ceil(log(self.N,2))*lam) + 3 * lam
             else:
-                ver_group_actions = self.num_rounds * self.N
+                sig = self.num_rounds * ceil(
+                    (1 - 1/(self.num_public_keys*self.N + 1)) * (group_cost + ceil(log(self.N,2))*lam) + 
+                    (1/(self.num_public_keys*self.N + 1)) * lam ) + 3*lam
+            # rows 17 and 18, we are using (41) and (42)
+            if self.skip and self.skip_left:
+                sig += self.num_rounds * 2 * lam * l_tail(t = self.N - 1, max = max)
+            elif self.skip and not self.skip_left:
+                raise ValueError("Right Skip signature sizes not implemented")
 
         costs = {
-            'pub_key' : ceil(set_cost*self.M + lam),
+            'pub_key' : ceil(set_cost*self.num_public_keys + lam),
             'signature' : ceil(sig),
-            'group_actions' : self.num_rounds*self.N,
-            'ver_group_actions' : ver_group_actions
+            'group_actions' : self.group_actions_verify,
+            'ver_group_actions' : self.group_actions_signing
         }
         return costs
 
@@ -127,7 +160,7 @@ class GRASS():
         """
         self.pk = []
         self.sk = []
-        for i in range(self.M):
+        for i in range(self.num_public_keys):
             key = self.A.rand_group()
             self.sk.append(key)
             self.pk.append(self.A.act(key,self.origin))
@@ -153,7 +186,7 @@ class GRASS():
         """
 
         self.commitment_secrets = [randint(0,2**self.lam - 1) for _ in range(self.num_rounds)]
-        if not self.MPC:
+        if not self.num_public_keysPC:
             self.commitment_elements = [self.A.act(SEED,self.origin) for SEED in self.commitment_secrets]
             self.commit_hash = cmt([cmt(x) for x in self.commitment_elements],lam = self.lam)
         else:
@@ -173,16 +206,16 @@ class GRASS():
         - list: Challenge.
         """
         if self.fixed_weight:
-            if self.MPC:
+            if self.num_public_keysPC:
                 raise ValueError('Challenge for MPC not yet implemented')
             else:
-                buff = [0] * (self.num_rounds - self.w) + [randint(1,self.M) for _ in range(self.w)]
+                buff = [0] * (self.num_rounds - self.w) + [randint(1,self.num_public_keys) for _ in range(self.w)]
             shuffle(buff)
             return buff
-        elif self.MPC:
+        elif self.num_public_keysPC:
             raise ValueError('Challenge for MPC not yet implemented')
         else:
-            return [randint(0,self.M) for _ in range(self.num_rounds)]
+            return [randint(0,self.num_public_keys) for _ in range(self.num_rounds)]
 
     def challenge_from_message(self, msg, ch = None):
         """
